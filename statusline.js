@@ -444,13 +444,12 @@ async function main() {
       labeled("Weekly: ", formatPercent(usage.weeklyUsage), colorForPercent(usage.weeklyUsage))
     );
     if (usage.extraUsageEnabled) {
-      segments2.push(
-        labeled(
-          "Extra Usage: ",
-          `${formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency)}/${formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency)}`,
-          colorForPercent(usage.extraUsageUtilization)
-        )
+      const used = c(
+        formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
+        colorForPercent(usage.extraUsageUtilization)
       );
+      const limit = c(formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency), "white");
+      segments2.push(`${c("Extra Usage: ", "gray")}${used}${c("/", "gray")}${limit}`);
     }
   } else {
     segments2.push(labeled("Weekly: ", "n/a", "gray"));
