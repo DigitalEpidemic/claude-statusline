@@ -60,6 +60,14 @@ function colorForPercent(pct) {
   return "red";
 }
 
+const BAR_WIDTH = 10;
+
+function renderBar(pct, width = BAR_WIDTH) {
+  if (pct == null || Number.isNaN(pct)) return "░".repeat(width);
+  const filled = Math.round((Math.max(0, Math.min(100, pct)) / 100) * width);
+  return "█".repeat(filled) + "░".repeat(width - filled);
+}
+
 // ---------------------------------------------------------------------------
 // stdin (Claude Code status JSON)
 // ---------------------------------------------------------------------------
@@ -403,12 +411,16 @@ async function main() {
     );
   }
 
-  // --- line 2: session usage | reset timer | session cost ---
+  // --- line 2: session usage+bar | reset | cost | weekly | overage ---
   const usage = await getUsage();
   const segments2 = [];
   if (usage) {
+    const sessionColor = colorForPercent(usage.sessionUsage);
     segments2.push(
-      c(`Session: ${formatPercent(usage.sessionUsage)}`, colorForPercent(usage.sessionUsage))
+      c(
+        `Session: ${renderBar(usage.sessionUsage)} ${formatPercent(usage.sessionUsage)}`,
+        sessionColor
+      )
     );
     if (usage.sessionResetAt) {
       const remaining = new Date(usage.sessionResetAt).getTime() - Date.now();
@@ -420,14 +432,12 @@ async function main() {
   const cost = data?.cost?.total_cost_usd;
   segments2.push(c(`Cost: $${(cost ?? 0).toFixed(2)}`, "green", { dim: true }));
 
-  // --- line 3: weekly usage | overage used | overage remaining ---
-  const segments3 = [];
   if (usage) {
-    segments3.push(
+    segments2.push(
       c(`Weekly: ${formatPercent(usage.weeklyUsage)}`, colorForPercent(usage.weeklyUsage))
     );
     if (usage.extraUsageEnabled) {
-      segments3.push(
+      segments2.push(
         c(
           `Overage Used: ${formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency)}`,
           colorForPercent(usage.extraUsageUtilization)
@@ -439,7 +449,7 @@ async function main() {
           : null;
       // Colored by the same utilization% as "Used" — little left (high
       // utilization) should read as alarming, plenty left should read green.
-      segments3.push(
+      segments2.push(
         c(
           `Overage Left: ${formatMoney(remaining, usage.extraUsageCurrency)}`,
           colorForPercent(usage.extraUsageUtilization),
@@ -448,13 +458,12 @@ async function main() {
       );
     }
   } else {
-    segments3.push(c("Weekly: n/a", "gray"));
+    segments2.push(c("Weekly: n/a", "gray"));
   }
 
   const sep = c(" | ", "gray");
   console.log(segments1.join(sep));
   console.log(segments2.join(sep));
-  if (segments3.length) console.log(segments3.join(sep));
 }
 
 main();
