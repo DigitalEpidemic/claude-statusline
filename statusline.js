@@ -20,7 +20,7 @@ const THRESHOLDS = { good: 50, warn: 80 };
 // — separate from THRESHOLDS since it's not a percentage of the raw window.
 const CONTEXT_TOKEN_THRESHOLDS = { amber: 80_000, red: 120_000 };
 
-const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$", EUR: "€", GBP: "£" };
+const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$" };
 
 const USAGE_CACHE_DIR = path.join(os.homedir(), ".cache", "claude-statusline");
 const USAGE_CACHE_FILE = path.join(USAGE_CACHE_DIR, "usage.json");
