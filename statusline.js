@@ -11,16 +11,25 @@ const { execFileSync } = require("child_process");
 // Tunables
 // ---------------------------------------------------------------------------
 
-// Percent thresholds shared by session/weekly/context/extra-usage bars.
+// Percent thresholds shared by session/weekly/extra-usage bars.
 // < GOOD -> green, < WARN -> yellow, >= WARN -> red.
 const THRESHOLDS = { good: 50, warn: 80 };
 
-const CURRENCY_SYMBOL = { USD: "$", CAD: "CA$", EUR: "€", GBP: "£" };
+// Absolute token thresholds for the context token count, anchored to the
+// ~120k "smart zone" limit past which response quality noticeably degrades
+// — separate from THRESHOLDS since it's not a percentage of the raw window.
+const CONTEXT_TOKEN_THRESHOLDS = { amber: 90_000, red: 120_000 };
+
+const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$", EUR: "€", GBP: "£" };
 
 const USAGE_CACHE_DIR = path.join(os.homedir(), ".cache", "claude-statusline");
 const USAGE_CACHE_FILE = path.join(USAGE_CACHE_DIR, "usage.json");
 const USAGE_CACHE_MAX_AGE_MS = 180_000; // matches ccstatusline's cache window
 const USAGE_API_TIMEOUT_MS = 3000;
+
+const FX_CACHE_FILE = path.join(USAGE_CACHE_DIR, "fxrate.json");
+const FX_CACHE_MAX_AGE_MS = 86_400_000; // 24h — exchange rates don't need to be fresher than that
+const FX_API_TIMEOUT_MS = 3000;
 
 // ---------------------------------------------------------------------------
 // Color helpers
@@ -38,6 +47,7 @@ const ANSI = {
   red: "\x1b[38;5;167m", // high usage / diff deletions
   gray: "\x1b[38;5;245m", // secondary text
   dimGray: "\x1b[38;5;238m", // separators
+  white: "\x1b[38;5;252m", // fixed bold accent for money values (Cost, Extra) — soft, not pure white
 };
 
 function c(text, color, { dim, bold } = {}) {
@@ -57,6 +67,24 @@ function labeled(label, value, color, opts) {
 function colorForPercent(pct) {
   if (pct == null || Number.isNaN(pct)) return "gray";
   if (pct < THRESHOLDS.good) return "green";
+  if (pct < THRESHOLDS.warn) return "amber";
+  return "red";
+}
+
+// Gray below the amber start, amber up to the 120k smart-zone limit, red past it.
+function colorForContextTokens(tokens) {
+  if (tokens == null) return "gray";
+  if (tokens < CONTEXT_TOKEN_THRESHOLDS.amber) return "gray";
+  if (tokens < CONTEXT_TOKEN_THRESHOLDS.red) return "amber";
+  return "red";
+}
+
+// Like colorForPercent, but stays the neutral "white" accent instead of
+// green when nowhere near the limit — only escalates to amber/red as usage
+// actually approaches it.
+function colorForApproachingLimit(pct) {
+  if (pct == null || Number.isNaN(pct)) return "white";
+  if (pct < THRESHOLDS.good) return "white";
   if (pct < THRESHOLDS.warn) return "amber";
   return "red";
 }
@@ -331,6 +359,72 @@ async function getUsage() {
 }
 
 // ---------------------------------------------------------------------------
+// FX rate (for showing Cost, which Claude Code only reports in USD, in CAD too)
+// ---------------------------------------------------------------------------
+
+function fetchUsdToCadRate() {
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: "open.er-api.com",
+        path: "/v6/latest/USD",
+        method: "GET",
+        timeout: FX_API_TIMEOUT_MS,
+      },
+      (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve(res.statusCode === 200 ? parsed?.rates?.CAD ?? null : null);
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.end();
+  });
+}
+
+function readFxCache() {
+  try {
+    return JSON.parse(fs.readFileSync(FX_CACHE_FILE, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeFxCache(rate) {
+  try {
+    fs.mkdirSync(USAGE_CACHE_DIR, { recursive: true });
+    fs.writeFileSync(FX_CACHE_FILE, JSON.stringify({ rate, cachedAt: Date.now() }));
+  } catch {
+    // best-effort cache; ignore write failures
+  }
+}
+
+async function getUsdToCadRate() {
+  const cached = readFxCache();
+  if (cached && Date.now() - cached.cachedAt < FX_CACHE_MAX_AGE_MS) {
+    return cached.rate;
+  }
+  const rate = await fetchUsdToCadRate();
+  if (rate != null) {
+    writeFxCache(rate);
+    return rate;
+  }
+  return cached?.rate ?? null; // stale-while-error
+}
+
+// ---------------------------------------------------------------------------
 // Formatting
 // ---------------------------------------------------------------------------
 
@@ -400,13 +494,13 @@ async function main() {
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
-    `Ctx ${formatTokens(usedTokens)} ${c(`${formatPercent(usedPercentage)}`, colorForPercent(usedPercentage), { bold: true })}`
+    `Ctx ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`
   );
 
   const git = getGitInfo(cwd);
   const folderName = c(path.basename(cwd), "gray");
   const locationSegment = git
-    ? `${folderName} ${c("·", "gray")} ${c(git.branch, "teal", { bold: true })} ${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}`
+    ? `${folderName} ${c("·", "gray")} ${c(git.branch, "teal", { bold: true })} ${c("(", "gray")}${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}${c(")", "gray")}`
     : folderName;
   segments1.push(locationSegment);
 
@@ -422,11 +516,18 @@ async function main() {
     segments2.push(labeled("Session: ", "n/a", "gray"));
   }
 
-  const cost = data?.cost?.total_cost_usd;
+  const cost = data?.cost?.total_cost_usd ?? 0;
+  const usdToCad = await getUsdToCadRate();
+  const costDisplay =
+    usdToCad != null
+      ? `${c(formatMoney(cost, "USD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost * usdToCad, "CAD")})`, "gray")}`
+      : c(formatMoney(cost, "USD"), "white", { bold: true });
   const resetTime = usage?.sessionResetAt
     ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
     : "n/a";
-  segments2.push(c(`Reset ${resetTime} │ Cost $${(cost ?? 0).toFixed(2)}`, "gray"));
+  segments2.push(
+    `${c("Reset ", "gray")}${c(resetTime, "white", { bold: true })}${c(" │ ", "gray")}${c("Cost ", "gray")}${costDisplay}`
+  );
 
   if (usage) {
     const weeklyColor = colorForPercent(usage.weeklyUsage);
@@ -434,12 +535,14 @@ async function main() {
       `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`
     );
     if (usage.extraUsageEnabled) {
-      segments2.push(
-        c(
-          `Extra ${formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency)}/${formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency)}`,
-          "gray"
-        )
-      );
+      const usedColor = colorForApproachingLimit(usage.extraUsageUtilization);
+      const used = c(formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency), usedColor, {
+        bold: true,
+      });
+      const limit = c(formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency), "white", {
+        bold: true,
+      });
+      segments2.push(`${c("Extra ", "gray")}${used}${c("/", "gray")}${limit}`);
     }
   } else {
     segments2.push(labeled("Weekly: ", "n/a", "gray"));
