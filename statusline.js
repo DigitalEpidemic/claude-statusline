@@ -15,14 +15,6 @@ const { execFileSync } = require("child_process");
 // < GOOD -> green, < WARN -> yellow, >= WARN -> red.
 const THRESHOLDS = { good: 50, warn: 80 };
 
-const EFFORT_COLOR = {
-  low: "green",
-  medium: "cyan",
-  high: "yellow",
-  xhigh: "orange",
-  max: "red",
-};
-
 const CURRENCY_SYMBOL = { USD: "$", CAD: "CA$", EUR: "€", GBP: "£" };
 
 const USAGE_CACHE_DIR = path.join(os.homedir(), ".cache", "claude-statusline");
@@ -34,23 +26,25 @@ const USAGE_API_TIMEOUT_MS = 3000;
 // Color helpers
 // ---------------------------------------------------------------------------
 
+// 256-color palette matching the oklch values from the "1c" design mock.
 const ANSI = {
   reset: "\x1b[0m",
+  bold: "\x1b[1m",
   dim: "\x1b[2m",
-  cyan: "\x1b[36m",
-  magenta: "\x1b[35m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  red: "\x1b[31m",
-  white: "\x1b[97m",
-  gray: "\x1b[90m",
-  orange: "\x1b[38;5;208m",
+  violet: "\x1b[38;5;140m", // model
+  teal: "\x1b[38;5;73m", // branch
+  green: "\x1b[38;5;114m", // low usage / diff additions
+  amber: "\x1b[38;5;179m", // mid usage
+  red: "\x1b[38;5;167m", // high usage / diff deletions
+  gray: "\x1b[38;5;245m", // secondary text
+  dimGray: "\x1b[38;5;238m", // separators
 };
 
-function c(text, color, { dim } = {}) {
+function c(text, color, { dim, bold } = {}) {
   const code = ANSI[color] ?? "";
+  const boldCode = bold ? ANSI.bold : "";
   const dimCode = dim ? ANSI.dim : "";
-  return `${dimCode}${code}${text}${ANSI.reset}`;
+  return `${boldCode}${dimCode}${code}${text}${ANSI.reset}`;
 }
 
 // A "Label: value" pair where the label stays a neutral gray and only the
@@ -59,19 +53,20 @@ function labeled(label, value, color, opts) {
   return `${c(label, "gray")}${c(value, color, opts)}`;
 }
 
+// Colors mean usage level only: green <50%, amber 50-79%, red >=80%.
 function colorForPercent(pct) {
   if (pct == null || Number.isNaN(pct)) return "gray";
   if (pct < THRESHOLDS.good) return "green";
-  if (pct < THRESHOLDS.warn) return "yellow";
+  if (pct < THRESHOLDS.warn) return "amber";
   return "red";
 }
 
 const BAR_WIDTH = 10;
 
 function renderBar(pct, width = BAR_WIDTH) {
-  if (pct == null || Number.isNaN(pct)) return "░".repeat(width);
+  if (pct == null || Number.isNaN(pct)) return "▱".repeat(width);
   const filled = Math.round((Math.max(0, Math.min(100, pct)) / 100) * width);
-  return "█".repeat(filled) + "░".repeat(width - filled);
+  return "▰".repeat(filled) + "▱".repeat(width - filled);
 }
 
 // ---------------------------------------------------------------------------
@@ -394,68 +389,62 @@ function getContextWindowMetrics(data) {
 async function main() {
   const data = readStdinJson();
   const cwd = data?.workspace?.current_dir ?? data?.cwd ?? process.cwd();
+  const sep = c(" │ ", "dimGray");
 
-  // --- line 1: model+effort | context | git branch | git changes ---
+  // --- line 1: model+effort | context | git branch+changes ---
   const modelName = data?.model?.display_name ?? "unknown";
   const effort = getThinkingEffort(data?.transcript_path);
-  const modelColor = effort ? EFFORT_COLOR[effort] ?? "gray" : "cyan";
-  const modelSegment = effort
-    ? `${c(modelName, modelColor)} ${c("●", modelColor)} ${c(effort, modelColor)}`
-    : c(modelName, modelColor);
+  const modelSegment =
+    c(modelName, "violet", { bold: true }) + (effort ? c(` · ${effort}`, "gray") : "");
   const segments1 = [modelSegment];
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
-    labeled("Ctx: ", `${formatTokens(usedTokens)} (${formatPercent(usedPercentage)})`, colorForPercent(usedPercentage))
+    `Ctx ${formatTokens(usedTokens)} ${c(`${formatPercent(usedPercentage)}`, colorForPercent(usedPercentage), { bold: true })}`
   );
 
   const git = getGitInfo(cwd);
-  if (git) {
-    segments1.push(c(git.branch, "magenta"));
-    segments1.push(
-      `(${c(`+${git.insertions}`, "green")},${c(`-${git.deletions}`, "red")})`
-    );
-  }
+  const folderName = c(path.basename(cwd), "gray");
+  const locationSegment = git
+    ? `${folderName} ${c("·", "gray")} ${c(git.branch, "teal", { bold: true })} ${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}`
+    : folderName;
+  segments1.push(locationSegment);
 
-  // --- line 2: session usage+bar | reset | cost | weekly | overage ---
+  // --- line 2: session bar+% | reset+cost | weekly bar+% | extra usage ---
   const usage = await getUsage();
   const segments2 = [];
   if (usage) {
     const sessionColor = colorForPercent(usage.sessionUsage);
     segments2.push(
-      labeled(
-        "Session: ",
-        `${renderBar(usage.sessionUsage)} ${formatPercent(usage.sessionUsage)}`,
-        sessionColor
-      )
+      `Session ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`
     );
-    if (usage.sessionResetAt) {
-      const remaining = new Date(usage.sessionResetAt).getTime() - Date.now();
-      segments2.push(labeled("Reset: ", formatDuration(remaining), "white"));
-    }
   } else {
     segments2.push(labeled("Session: ", "n/a", "gray"));
   }
+
   const cost = data?.cost?.total_cost_usd;
-  segments2.push(labeled("Cost: ", `$${(cost ?? 0).toFixed(2)}`, "green"));
+  const resetTime = usage?.sessionResetAt
+    ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
+    : "n/a";
+  segments2.push(c(`Reset ${resetTime} │ Cost $${(cost ?? 0).toFixed(2)}`, "gray"));
 
   if (usage) {
+    const weeklyColor = colorForPercent(usage.weeklyUsage);
     segments2.push(
-      labeled("Weekly: ", formatPercent(usage.weeklyUsage), colorForPercent(usage.weeklyUsage))
+      `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`
     );
     if (usage.extraUsageEnabled) {
-      const used = c(
-        formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
-        colorForPercent(usage.extraUsageUtilization)
+      segments2.push(
+        c(
+          `Extra ${formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency)}/${formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency)}`,
+          "gray"
+        )
       );
-      const limit = c(formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency), "white");
-      segments2.push(`${c("Extra Usage: ", "gray")}${used}${c("/", "gray")}${limit}`);
     }
   } else {
     segments2.push(labeled("Weekly: ", "n/a", "gray"));
   }
 
-  const sep = c(" | ", "gray");
   console.log(segments1.join(sep));
   console.log(segments2.join(sep));
 }
