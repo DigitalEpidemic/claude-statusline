@@ -489,6 +489,10 @@ async function main() {
     : folderName;
   segments1.push(locationSegment);
 
+  if (fs.existsSync(path.join(cwd, "package.json"))) {
+    segments1.push(c(`⬢ ${process.version}`, "green"));
+  }
+
   // --- line 2: session bar+% | reset+cost | weekly bar+% | extra usage ---
   const usage = await getUsage();
   const segments2 = [];
