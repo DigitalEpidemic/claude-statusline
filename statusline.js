@@ -389,14 +389,13 @@ async function main() {
   const data = readStdinJson();
   const cwd = data?.workspace?.current_dir ?? data?.cwd ?? process.cwd();
 
-  // --- line 1: model | thinking | context | git branch | git changes ---
+  // --- line 1: model+effort | context | git branch | git changes ---
   const modelName = data?.model?.display_name ?? "unknown";
-  const segments1 = [c(modelName, "cyan")];
-
   const effort = getThinkingEffort(data?.transcript_path);
-  if (effort) {
-    segments1.push(c(`Thinking: ${effort}`, EFFORT_COLOR[effort] ?? "gray"));
-  }
+  const modelSegment = effort
+    ? `${c(modelName, "cyan")} ${c("●", EFFORT_COLOR[effort] ?? "gray")} ${c(effort, EFFORT_COLOR[effort] ?? "gray")}`
+    : c(modelName, "cyan");
+  const segments1 = [modelSegment];
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
