@@ -32,6 +32,42 @@ const FX_CACHE_MAX_AGE_MS = 86_400_000; // 24h — exchange rates don't need to 
 const FX_API_TIMEOUT_MS = 3000;
 
 // ---------------------------------------------------------------------------
+// Generic TTL cache (shared by the usage and FX-rate lookups below)
+// ---------------------------------------------------------------------------
+
+function readCacheFile(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeCacheFile(file, data) {
+  try {
+    fs.mkdirSync(USAGE_CACHE_DIR, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ data, cachedAt: Date.now() }));
+  } catch {
+    // best-effort cache; ignore write failures
+  }
+}
+
+// Returns cached data if younger than maxAgeMs, otherwise calls fetchFn and
+// caches a non-null result. Falls back to stale cached data on fetch failure.
+async function withCache(file, maxAgeMs, fetchFn) {
+  const cached = readCacheFile(file);
+  if (cached && Date.now() - cached.cachedAt < maxAgeMs) {
+    return cached.data;
+  }
+  const fresh = await fetchFn();
+  if (fresh != null) {
+    writeCacheFile(file, fresh);
+    return fresh;
+  }
+  return cached?.data ?? null; // stale-while-error
+}
+
+// ---------------------------------------------------------------------------
 // Color helpers
 // ---------------------------------------------------------------------------
 
@@ -322,40 +358,12 @@ function normalizeUsage(raw) {
   };
 }
 
-function readUsageCache() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(USAGE_CACHE_FILE, "utf8"));
-    return raw;
-  } catch {
-    return null;
-  }
-}
-
-function writeUsageCache(data) {
-  try {
-    fs.mkdirSync(USAGE_CACHE_DIR, { recursive: true });
-    fs.writeFileSync(USAGE_CACHE_FILE, JSON.stringify({ data, cachedAt: Date.now() }));
-  } catch {
-    // best-effort cache; ignore write failures
-  }
-}
-
 async function getUsage() {
-  const cached = readUsageCache();
-  if (cached && Date.now() - cached.cachedAt < USAGE_CACHE_MAX_AGE_MS) {
-    return cached.data;
-  }
-
-  const token = getUsageToken();
-  if (!token) return cached?.data ?? null;
-
-  const raw = await fetchUsageFromApi(token);
-  const normalized = normalizeUsage(raw);
-  if (normalized) {
-    writeUsageCache(normalized);
-    return normalized;
-  }
-  return cached?.data ?? null; // stale-while-error
+  return withCache(USAGE_CACHE_FILE, USAGE_CACHE_MAX_AGE_MS, async () => {
+    const token = getUsageToken();
+    if (!token) return null;
+    return normalizeUsage(await fetchUsageFromApi(token));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -394,34 +402,8 @@ function fetchUsdToCadRate() {
   });
 }
 
-function readFxCache() {
-  try {
-    return JSON.parse(fs.readFileSync(FX_CACHE_FILE, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function writeFxCache(rate) {
-  try {
-    fs.mkdirSync(USAGE_CACHE_DIR, { recursive: true });
-    fs.writeFileSync(FX_CACHE_FILE, JSON.stringify({ rate, cachedAt: Date.now() }));
-  } catch {
-    // best-effort cache; ignore write failures
-  }
-}
-
 async function getUsdToCadRate() {
-  const cached = readFxCache();
-  if (cached && Date.now() - cached.cachedAt < FX_CACHE_MAX_AGE_MS) {
-    return cached.rate;
-  }
-  const rate = await fetchUsdToCadRate();
-  if (rate != null) {
-    writeFxCache(rate);
-    return rate;
-  }
-  return cached?.rate ?? null; // stale-while-error
+  return withCache(FX_CACHE_FILE, FX_CACHE_MAX_AGE_MS, fetchUsdToCadRate);
 }
 
 // ---------------------------------------------------------------------------

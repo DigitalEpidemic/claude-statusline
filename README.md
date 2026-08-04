@@ -22,11 +22,10 @@ Point Claude Code's status line at this script in `~/.claude/settings.json`:
 
 ## What it shows
 
-Three lines, matching the ccstatusline layout it replaces:
+Two lines:
 
 1. Model | thinking effort | context window usage | git branch | git changes (+ins/-del)
-2. Session usage % | time until session reset | session cost
-3. Weekly usage % | overage used | overage remaining
+2. Session usage bar+% | time until session reset | session cost (+ CAD) | weekly usage bar+% | extra usage used/limit
 
 ## How it works
 
@@ -57,8 +56,9 @@ recovered separately:
 
 Everything adjustable lives in constants at the top of `statusline.js`:
 
-- `THRESHOLDS` — the green/yellow/red cutoffs (default `<50%` / `50-80%` /
-  `>=80%`) shared by session %, weekly %, context %, and overage
-  utilization.
-- `EFFORT_COLOR` — color per thinking-effort level (low/medium/high/xhigh/max).
-- `CURRENCY_SYMBOL` — currency code to symbol mapping for overage amounts.
+- `THRESHOLDS` — the green/amber/red cutoffs (default `<50%` / `50-80%` /
+  `>=80%`) shared by session %, weekly %, and extra-usage utilization.
+- `CONTEXT_TOKEN_THRESHOLDS` — absolute token cutoffs (default 90k/120k) for
+  coloring the context window token count.
+- `CURRENCY_SYMBOL` — currency code to symbol mapping for cost/extra-usage
+  amounts.
