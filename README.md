@@ -5,6 +5,8 @@ replacing [ccstatusline](https://github.com/sirmalloc/ccstatusline) with a
 single dependency-free Node script that adds threshold-based dynamic
 coloring ccstatusline doesn't support.
 
+![Screenshot of the status line output](assets/screenshot.png)
+
 ## Setup
 
 Point Claude Code's status line at this script in `~/.claude/settings.json`:
