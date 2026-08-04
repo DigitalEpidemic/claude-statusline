@@ -446,21 +446,8 @@ async function main() {
     if (usage.extraUsageEnabled) {
       segments2.push(
         labeled(
-          "Overage Used: ",
-          formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
-          colorForPercent(usage.extraUsageUtilization)
-        )
-      );
-      const remaining =
-        usage.extraUsageLimit != null && usage.extraUsageUsed != null
-          ? usage.extraUsageLimit - usage.extraUsageUsed
-          : null;
-      // Colored by the same utilization% as "Used" — little left (high
-      // utilization) should read as alarming, plenty left should read green.
-      segments2.push(
-        labeled(
-          "Overage Left: ",
-          formatMoney(remaining, usage.extraUsageCurrency),
+          "Extra Usage: ",
+          `${formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency)}/${formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency)}`,
           colorForPercent(usage.extraUsageUtilization)
         )
       );
