@@ -476,7 +476,7 @@ async function main() {
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
-    `Ctx ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`
+    `Context ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`
   );
 
   const git = getGitInfo(cwd);
