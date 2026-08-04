@@ -53,6 +53,12 @@ function c(text, color, { dim } = {}) {
   return `${dimCode}${code}${text}${ANSI.reset}`;
 }
 
+// A "Label: value" pair where the label stays a neutral gray and only the
+// value takes on the dynamic/threshold color.
+function labeled(label, value, color, opts) {
+  return `${c(label, "gray")}${c(value, color, opts)}`;
+}
+
 function colorForPercent(pct) {
   if (pct == null || Number.isNaN(pct)) return "gray";
   if (pct < THRESHOLDS.good) return "green";
@@ -392,14 +398,15 @@ async function main() {
   // --- line 1: model+effort | context | git branch | git changes ---
   const modelName = data?.model?.display_name ?? "unknown";
   const effort = getThinkingEffort(data?.transcript_path);
+  const modelColor = effort ? EFFORT_COLOR[effort] ?? "gray" : "cyan";
   const modelSegment = effort
-    ? `${c(modelName, "cyan")} ${c("●", EFFORT_COLOR[effort] ?? "gray")} ${c(effort, EFFORT_COLOR[effort] ?? "gray")}`
-    : c(modelName, "cyan");
+    ? `${c(modelName, modelColor)} ${c("●", modelColor)} ${c(effort, modelColor)}`
+    : c(modelName, modelColor);
   const segments1 = [modelSegment];
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
-    c(`Ctx: ${formatTokens(usedTokens)} (${formatPercent(usedPercentage)})`, colorForPercent(usedPercentage))
+    labeled("Ctx: ", `${formatTokens(usedTokens)} (${formatPercent(usedPercentage)})`, colorForPercent(usedPercentage))
   );
 
   const git = getGitInfo(cwd);
@@ -416,29 +423,31 @@ async function main() {
   if (usage) {
     const sessionColor = colorForPercent(usage.sessionUsage);
     segments2.push(
-      c(
-        `Session: ${renderBar(usage.sessionUsage)} ${formatPercent(usage.sessionUsage)}`,
+      labeled(
+        "Session: ",
+        `${renderBar(usage.sessionUsage)} ${formatPercent(usage.sessionUsage)}`,
         sessionColor
       )
     );
     if (usage.sessionResetAt) {
       const remaining = new Date(usage.sessionResetAt).getTime() - Date.now();
-      segments2.push(c(`Reset: ${formatDuration(remaining)}`, "white", { dim: true }));
+      segments2.push(labeled("Reset: ", formatDuration(remaining), "white"));
     }
   } else {
-    segments2.push(c("Session: n/a", "gray"));
+    segments2.push(labeled("Session: ", "n/a", "gray"));
   }
   const cost = data?.cost?.total_cost_usd;
-  segments2.push(c(`Cost: $${(cost ?? 0).toFixed(2)}`, "green", { dim: true }));
+  segments2.push(labeled("Cost: ", `$${(cost ?? 0).toFixed(2)}`, "green"));
 
   if (usage) {
     segments2.push(
-      c(`Weekly: ${formatPercent(usage.weeklyUsage)}`, colorForPercent(usage.weeklyUsage))
+      labeled("Weekly: ", formatPercent(usage.weeklyUsage), colorForPercent(usage.weeklyUsage))
     );
     if (usage.extraUsageEnabled) {
       segments2.push(
-        c(
-          `Overage Used: ${formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency)}`,
+        labeled(
+          "Overage Used: ",
+          formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
           colorForPercent(usage.extraUsageUtilization)
         )
       );
@@ -449,15 +458,15 @@ async function main() {
       // Colored by the same utilization% as "Used" — little left (high
       // utilization) should read as alarming, plenty left should read green.
       segments2.push(
-        c(
-          `Overage Left: ${formatMoney(remaining, usage.extraUsageCurrency)}`,
-          colorForPercent(usage.extraUsageUtilization),
-          { dim: true }
+        labeled(
+          "Overage Left: ",
+          formatMoney(remaining, usage.extraUsageCurrency),
+          colorForPercent(usage.extraUsageUtilization)
         )
       );
     }
   } else {
-    segments2.push(c("Weekly: n/a", "gray"));
+    segments2.push(labeled("Weekly: ", "n/a", "gray"));
   }
 
   const sep = c(" | ", "gray");
