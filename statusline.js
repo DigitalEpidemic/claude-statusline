@@ -18,7 +18,7 @@ const THRESHOLDS = { good: 50, warn: 80 };
 // Absolute token thresholds for the context token count, anchored to the
 // ~120k "smart zone" limit past which response quality noticeably degrades
 // — separate from THRESHOLDS since it's not a percentage of the raw window.
-const CONTEXT_TOKEN_THRESHOLDS = { amber: 90_000, red: 120_000 };
+const CONTEXT_TOKEN_THRESHOLDS = { amber: 80_000, red: 120_000 };
 
 const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$", EUR: "€", GBP: "£" };
 
