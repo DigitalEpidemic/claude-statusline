@@ -107,22 +107,25 @@ function colorForPercent(pct) {
   return "red";
 }
 
-// Gray below the amber start, amber up to the 120k smart-zone limit, red past it.
-function colorForContextTokens(tokens) {
-  if (tokens == null) return "gray";
-  if (tokens < CONTEXT_TOKEN_THRESHOLDS.amber) return "gray";
-  if (tokens < CONTEXT_TOKEN_THRESHOLDS.red) return "amber";
+// White below `low` (matching the Cost money accent), amber below `high`,
+// red beyond it — shared by any value that stays neutral until it actually
+// approaches a limit, rather than signaling "good" the way colorForPercent does.
+function colorForThreshold(value, low, high) {
+  if (value == null || Number.isNaN(value)) return "white";
+  if (value < low) return "white";
+  if (value < high) return "amber";
   return "red";
+}
+
+function colorForContextTokens(tokens) {
+  return colorForThreshold(tokens, CONTEXT_TOKEN_THRESHOLDS.amber, CONTEXT_TOKEN_THRESHOLDS.red);
 }
 
 // Like colorForPercent, but stays the neutral "white" accent instead of
 // green when nowhere near the limit — only escalates to amber/red as usage
 // actually approaches it.
 function colorForApproachingLimit(pct) {
-  if (pct == null || Number.isNaN(pct)) return "white";
-  if (pct < THRESHOLDS.good) return "white";
-  if (pct < THRESHOLDS.warn) return "amber";
-  return "red";
+  return colorForThreshold(pct, THRESHOLDS.good, THRESHOLDS.warn);
 }
 
 const BAR_WIDTH = 10;
