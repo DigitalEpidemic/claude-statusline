@@ -474,7 +474,7 @@ async function main() {
   const modelName = data?.model?.display_name ?? "unknown";
   const effort = getThinkingEffort(data?.transcript_path);
   const modelSegment =
-    c(modelName, "violet", { bold: true }) + (effort ? c(` · ${effort}`, "gray") : "");
+    c(modelName, "violet", { bold: true }) + (effort ? c(` · ${effort}`, "violet") : "");
   const segments1 = [modelSegment];
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
@@ -483,9 +483,9 @@ async function main() {
   );
 
   const git = getGitInfo(cwd);
-  const folderName = c(path.basename(cwd), "gray");
+  const folderName = c(path.basename(cwd), "teal");
   const locationSegment = git
-    ? `${folderName} ${c("·", "gray")} ${c(git.branch, "teal", { bold: true })} ${c("(", "gray")}${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}${c(")", "gray")}`
+    ? `${folderName} ${c("·", "teal")} ${c(git.branch, "teal", { bold: true })} ${c("(", "gray")}${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}${c(")", "gray")}`
     : folderName;
   segments1.push(locationSegment);
 
