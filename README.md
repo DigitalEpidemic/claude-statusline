@@ -9,18 +9,25 @@ coloring ccstatusline doesn't support.
 
 ## Setup
 
-Point Claude Code's status line at this script in `~/.claude/settings.json`:
+Requires Node.js on `PATH` — no other dependencies.
+
+1. Clone this repo somewhere on the machine.
+2. Add a `statusLine` block to `~/.claude/settings.json`, pointing `command`
+   at the absolute path of `statusline.js` in your clone (merge this in if
+   the file already has other keys):
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "node /Users/jeffreypolasz/code/claude-statusline/statusline.js",
+    "command": "node /path/to/claude-statusline/statusline.js",
     "padding": 0,
     "refreshInterval": 10
   }
 }
 ```
+
+3. Restart Claude Code (or start a new session) to pick up the change.
 
 ## What it shows
 
