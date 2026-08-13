@@ -63,13 +63,7 @@ const getLabel = (name, fallback) => CUSTOM_LABELS[name] ?? fallback;
 // under a custom CLAUDE_CONFIG_DIR) don't clobber each other's cached usage
 // within the TTL window.
 function getAccountCacheKey() {
-  return process.env.CLAUDE_CONFIG_DIR
-    ? crypto
-        .createHash("sha256")
-        .update(getClaudeConfigDir())
-        .digest("hex")
-        .slice(0, 8)
-    : "default";
+  return process.env.CLAUDE_CONFIG_DIR ? getConfigDirHash() : "default";
 }
 
 const CACHE_ROOT = path.join(os.homedir(), ".cache", "claude-statusline");
@@ -311,6 +305,16 @@ function getClaudeConfigDir() {
     : path.join(os.homedir(), ".claude");
 }
 
+// Shared by getAccountCacheKey (cache namespacing) and getKeychainServiceName
+// (Keychain entry namespacing) — both need the same per-config-dir hash.
+function getConfigDirHash() {
+  return crypto
+    .createHash("sha256")
+    .update(getClaudeConfigDir())
+    .digest("hex")
+    .slice(0, 8);
+}
+
 // Labels the active profile so multiple CLAUDE_CONFIG_DIR accounts (e.g. a
 // work profile) are visually distinguishable from the default. Derived from
 // the config dir name rather than hardcoded, e.g. ~/.claude-work -> "WORK".
@@ -347,12 +351,7 @@ function readTokenFromCredentialsFile() {
 // custom config dir — otherwise every account would read the default one.
 function getKeychainServiceName() {
   if (!process.env.CLAUDE_CONFIG_DIR) return "Claude Code-credentials";
-  const hash = crypto
-    .createHash("sha256")
-    .update(getClaudeConfigDir())
-    .digest("hex")
-    .slice(0, 8);
-  return `Claude Code-credentials-${hash}`;
+  return `Claude Code-credentials-${getConfigDirHash()}`;
 }
 
 function readTokenFromKeychain() {
