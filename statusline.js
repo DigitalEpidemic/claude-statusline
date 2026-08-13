@@ -5,6 +5,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const https = require("https");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 // ---------------------------------------------------------------------------
@@ -22,12 +23,29 @@ const CONTEXT_TOKEN_THRESHOLDS = { amber: 80_000, red: 120_000 };
 
 const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$" };
 
-const USAGE_CACHE_DIR = path.join(os.homedir(), ".cache", "claude-statusline");
-const USAGE_CACHE_FILE = path.join(USAGE_CACHE_DIR, "usage.json");
+// Namespaced per CLAUDE_CONFIG_DIR so multiple accounts (e.g. a work profile
+// under a custom CLAUDE_CONFIG_DIR) don't clobber each other's cached usage
+// within the TTL window.
+function getAccountCacheKey() {
+  return process.env.CLAUDE_CONFIG_DIR
+    ? crypto
+        .createHash("sha256")
+        .update(getClaudeConfigDir())
+        .digest("hex")
+        .slice(0, 8)
+    : "default";
+}
+
+const CACHE_ROOT = path.join(os.homedir(), ".cache", "claude-statusline");
+const USAGE_CACHE_FILE = path.join(
+  CACHE_ROOT,
+  getAccountCacheKey(),
+  "usage.json",
+);
 const USAGE_CACHE_MAX_AGE_MS = 180_000; // matches ccstatusline's cache window
 const USAGE_API_TIMEOUT_MS = 3000;
 
-const FX_CACHE_FILE = path.join(USAGE_CACHE_DIR, "fxrate.json");
+const FX_CACHE_FILE = path.join(CACHE_ROOT, "fxrate.json");
 const FX_CACHE_MAX_AGE_MS = 86_400_000; // 24h — exchange rates don't need to be fresher than that
 const FX_API_TIMEOUT_MS = 3000;
 
@@ -45,7 +63,7 @@ function readCacheFile(file) {
 
 function writeCacheFile(file, data) {
   try {
-    fs.mkdirSync(USAGE_CACHE_DIR, { recursive: true });
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ data, cachedAt: Date.now() }));
   } catch {
     // best-effort cache; ignore write failures
@@ -275,13 +293,27 @@ function readTokenFromCredentialsFile() {
   }
 }
 
+// Claude Code namespaces the Keychain entry per config dir: the default
+// "Claude Code-credentials" for ~/.claude, or "Claude Code-credentials-<hash>"
+// (sha256 of the resolved CLAUDE_CONFIG_DIR path, first 8 hex chars) for any
+// custom config dir — otherwise every account would read the default one.
+function getKeychainServiceName() {
+  if (!process.env.CLAUDE_CONFIG_DIR) return "Claude Code-credentials";
+  const hash = crypto
+    .createHash("sha256")
+    .update(getClaudeConfigDir())
+    .digest("hex")
+    .slice(0, 8);
+  return `Claude Code-credentials-${hash}`;
+}
+
 function readTokenFromKeychain() {
   try {
     // The Keychain secret is the same {claudeAiOauth:{accessToken,...}} JSON
     // blob as .credentials.json, not a bare token string.
     const raw = execFileSync(
       "security",
-      ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+      ["find-generic-password", "-s", getKeychainServiceName(), "-w"],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
     ).trim();
     return extractAccessToken(raw);
