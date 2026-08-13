@@ -164,16 +164,22 @@ logic module — see [Tests](#tests) below):
 
 ## Tests
 
-The formatting/coloring/usage-shaping logic (`formatDuration`,
-`normalizeUsage`, `colorForPercent`, etc.) lives in `lib.js`, split out from
-`statusline.js` specifically so it's unit-testable without mocking stdin,
-git, Keychain, or network calls. Tests use Node's built-in test runner —
-no dependencies, no `npm install`:
+Two layers, both run with Node's built-in test runner — no dependencies, no
+`npm install`:
 
 ```sh
 node --test
 ```
 
-`statusline.js` itself (stdin parsing, git/Keychain/network I/O, terminal
-rendering) isn't covered — it's thin glue over `lib.js` and not worth
-mocking that much I/O for a personal tool.
+- `lib.test.js` — unit tests for the formatting/coloring/usage-shaping/
+  settings-parsing logic (`formatDuration`, `normalizeUsage`,
+  `colorForPercent`, `parseHiddenSegments`, etc.) that lives in `lib.js`,
+  split out from `statusline.js` specifically so it's testable without
+  mocking stdin, git, Keychain, or network calls.
+- `statusline.integration.test.js` — spawns the real `statusline.js` with a
+  fake, credential-less `CLAUDE_CONFIG_DIR` (so it never touches the real
+  Keychain or usage API) and asserts on its actual stdout, verifying
+  `CLAUDE_STATUSLINE_HIDE`/`CLAUDE_STATUSLINE_LABELS` behave as documented
+  above. The `cost` segment is force-hidden in these runs since it always
+  makes a live FX-rate call — its formatting is covered by `lib.test.js`
+  instead.
