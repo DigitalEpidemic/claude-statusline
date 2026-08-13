@@ -23,6 +23,15 @@ const CONTEXT_TOKEN_THRESHOLDS = { amber: 80_000, red: 120_000 };
 
 const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$" };
 
+// Claude Code's cost.total_cost_usd is misleadingly named — it's actually in
+// the account's own billing currency, which depends on the account, not the
+// field name (a Canadian Pro account reports CAD; a US enterprise account
+// reports USD). Override per-account via the "env" block in that profile's
+// settings.json, e.g. CLAUDE_STATUSLINE_COST_CURRENCY=USD for a US account.
+const RAW_COST_CURRENCY = (
+  process.env.CLAUDE_STATUSLINE_COST_CURRENCY ?? "CAD"
+).toUpperCase();
+
 // Segments to omit, e.g. "session,reset,weekly" for an API-pricing account
 // that has no five-hour/weekly subscription limits. Set per-account via the
 // "env" block in that profile's settings.json (CLAUDE_CONFIG_DIR/settings.json)
@@ -623,12 +632,19 @@ async function main() {
   }
 
   if (showSegment("cost")) {
-    const cost = data?.cost?.total_cost_usd ?? 0; // NOTE: mislabeled — this is actually CAD
+    const cost = data?.cost?.total_cost_usd ?? 0; // see RAW_COST_CURRENCY
     const usdToCad = await getUsdToCadRate();
-    const costDisplay =
+    const otherCurrency = RAW_COST_CURRENCY === "USD" ? "CAD" : "USD";
+    const convertedCost =
       usdToCad != null
-        ? `${c(formatMoney(cost, "CAD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost / usdToCad, "USD")})`, "gray")}`
-        : c(formatMoney(cost, "CAD"), "white", { bold: true });
+        ? RAW_COST_CURRENCY === "USD"
+          ? cost * usdToCad
+          : cost / usdToCad
+        : null;
+    const costDisplay =
+      convertedCost != null
+        ? `${c(formatMoney(cost, RAW_COST_CURRENCY), "white", { bold: true })} ${c(`(≈${formatMoney(convertedCost, otherCurrency)})`, "gray")}`
+        : c(formatMoney(cost, RAW_COST_CURRENCY), "white", { bold: true });
     segments2.push(`${c(`${getLabel("cost", "Cost")} `, "gray")}${costDisplay}`);
   }
 
