@@ -5,7 +5,7 @@
 // lib.test.js for that). Verifies CLAUDE_STATUSLINE_HIDE/_LABELS actually
 // change the printed output the way README.md documents.
 
-const { test, describe } = require("node:test");
+const { test, describe, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -23,6 +23,11 @@ const FAKE_CONFIG_DIR = fs.mkdtempSync(
 const FIXTURE_CWD = fs.mkdtempSync(
   path.join(os.tmpdir(), "claude-statusline-test-cwd-"),
 );
+
+after(() => {
+  fs.rmSync(FAKE_CONFIG_DIR, { recursive: true, force: true });
+  fs.rmSync(FIXTURE_CWD, { recursive: true, force: true });
+});
 
 // The "cost" segment always makes a live FX-rate network call when shown
 // (see README's "How it works") — hidden by default here to keep tests
