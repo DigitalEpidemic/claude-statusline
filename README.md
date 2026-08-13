@@ -2,8 +2,8 @@
 
 A hand-rolled status line for [Claude Code](https://claude.com/claude-code),
 replacing [ccstatusline](https://github.com/sirmalloc/ccstatusline) with a
-single dependency-free Node script that adds threshold-based dynamic
-coloring ccstatusline doesn't support.
+dependency-free Node script that adds threshold-based dynamic coloring
+ccstatusline doesn't support.
 
 ![Screenshot of the status line output](assets/screenshot.png)
 
@@ -152,7 +152,8 @@ both currencies. Cached to `~/.cache/claude-statusline/fxrate.json` for 24h.
 
 ## Tuning
 
-Everything adjustable lives in constants at the top of `statusline.js`:
+Everything adjustable lives in constants at the top of `lib.js` (the pure
+logic module — see [Tests](#tests) below):
 
 - `THRESHOLDS` — the green/amber/red cutoffs (default `<50%` / `50-80%` /
   `>=80%`) shared by session %, weekly %, and extra-usage utilization.
@@ -160,3 +161,19 @@ Everything adjustable lives in constants at the top of `statusline.js`:
   coloring the context window token count.
 - `CURRENCY_SYMBOL` — currency code to symbol mapping for cost/extra-usage
   amounts.
+
+## Tests
+
+The formatting/coloring/usage-shaping logic (`formatDuration`,
+`normalizeUsage`, `colorForPercent`, etc.) lives in `lib.js`, split out from
+`statusline.js` specifically so it's unit-testable without mocking stdin,
+git, Keychain, or network calls. Tests use Node's built-in test runner —
+no dependencies, no `npm install`:
+
+```sh
+node --test
+```
+
+`statusline.js` itself (stdin parsing, git/Keychain/network I/O, terminal
+rendering) isn't covered — it's thin glue over `lib.js` and not worth
+mocking that much I/O for a personal tool.
