@@ -118,7 +118,11 @@ function colorForThreshold(value, low, high) {
 }
 
 function colorForContextTokens(tokens) {
-  return colorForThreshold(tokens, CONTEXT_TOKEN_THRESHOLDS.amber, CONTEXT_TOKEN_THRESHOLDS.red);
+  return colorForThreshold(
+    tokens,
+    CONTEXT_TOKEN_THRESHOLDS.amber,
+    CONTEXT_TOKEN_THRESHOLDS.red,
+  );
 }
 
 // Like colorForPercent, but stays the neutral "white" accent instead of
@@ -179,10 +183,14 @@ function getGitInfo(cwd) {
   if (runGit(["rev-parse", "--is-inside-work-tree"], cwd) !== "true") {
     return null;
   }
-  const branch = runGit(["symbolic-ref", "--short", "HEAD"], cwd) ||
-    runGit(["rev-parse", "--short", "HEAD"], cwd) || "detached";
+  const branch =
+    runGit(["symbolic-ref", "--short", "HEAD"], cwd) ||
+    runGit(["rev-parse", "--short", "HEAD"], cwd) ||
+    "detached";
   const unstaged = parseShortstat(runGit(["diff", "--shortstat"], cwd));
-  const staged = parseShortstat(runGit(["diff", "--cached", "--shortstat"], cwd));
+  const staged = parseShortstat(
+    runGit(["diff", "--cached", "--shortstat"], cwd),
+  );
   return {
     branch,
     insertions: unstaged.insertions + staged.insertions,
@@ -257,7 +265,10 @@ function extractAccessToken(rawJson) {
 
 function readTokenFromCredentialsFile() {
   try {
-    const raw = fs.readFileSync(path.join(getClaudeConfigDir(), ".credentials.json"), "utf8");
+    const raw = fs.readFileSync(
+      path.join(getClaudeConfigDir(), ".credentials.json"),
+      "utf8",
+    );
     return extractAccessToken(raw);
   } catch {
     return null;
@@ -271,7 +282,7 @@ function readTokenFromKeychain() {
     const raw = execFileSync(
       "security",
       ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
     ).trim();
     return extractAccessToken(raw);
   } catch {
@@ -315,7 +326,7 @@ function fetchUsageFromApi(token) {
           }
           resolve(null);
         });
-      }
+      },
     );
     req.on("error", () => resolve(null));
     req.on("timeout", () => {
@@ -340,9 +351,13 @@ function normalizeUsage(raw) {
   // monthly_limit: 15900, decimal_places: 2 meant $159.00, not $15,900.
   const scale = 10 ** (raw.extra_usage?.decimal_places ?? 2);
   const extraUsageLimit =
-    raw.extra_usage?.monthly_limit != null ? raw.extra_usage.monthly_limit / scale : null;
+    raw.extra_usage?.monthly_limit != null
+      ? raw.extra_usage.monthly_limit / scale
+      : null;
   const extraUsageUsed =
-    raw.extra_usage?.used_credits != null ? raw.extra_usage.used_credits / scale : null;
+    raw.extra_usage?.used_credits != null
+      ? raw.extra_usage.used_credits / scale
+      : null;
   const extraUsageUtilization =
     raw.extra_usage?.utilization ??
     raw.spend?.percent ??
@@ -389,12 +404,14 @@ function fetchUsdToCadRate() {
         res.on("end", () => {
           try {
             const parsed = JSON.parse(body);
-            resolve(res.statusCode === 200 ? parsed?.rates?.CAD ?? null : null);
+            resolve(
+              res.statusCode === 200 ? (parsed?.rates?.CAD ?? null) : null,
+            );
           } catch {
             resolve(null);
           }
         });
-      }
+      },
     );
     req.on("error", () => resolve(null));
     req.on("timeout", () => {
@@ -474,12 +491,13 @@ async function main() {
   const modelName = data?.model?.display_name ?? "unknown";
   const effort = getThinkingEffort(data?.transcript_path);
   const modelSegment =
-    c(modelName, "violet", { bold: true }) + (effort ? c(` · ${effort}`, "violet") : "");
+    c(modelName, "violet", { bold: true }) +
+    (effort ? c(` · ${effort}`, "violet") : "");
   const segments1 = [modelSegment];
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
-    `Context ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`
+    `Context ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`,
   );
 
   const git = getGitInfo(cwd);
@@ -499,7 +517,7 @@ async function main() {
   if (usage) {
     const sessionColor = colorForPercent(usage.sessionUsage);
     segments2.push(
-      `Session ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`
+      `Session ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`,
     );
   } else {
     segments2.push(labeled("Session: ", "n/a", "gray"));
@@ -515,22 +533,30 @@ async function main() {
     ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
     : "n/a";
   segments2.push(
-    `${c("Reset ", "gray")}${c(resetTime, "white", { bold: true })}${c(" │ ", "gray")}${c("Cost ", "gray")}${costDisplay}`
+    `${c("Reset ", "gray")}${c(resetTime, "white", { bold: true })}${c(" │ ", "gray")}${c("Cost ", "gray")}${costDisplay}`,
   );
 
   if (usage) {
     const weeklyColor = colorForPercent(usage.weeklyUsage);
     segments2.push(
-      `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`
+      `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`,
     );
     if (usage.extraUsageEnabled) {
       const usedColor = colorForApproachingLimit(usage.extraUsageUtilization);
-      const used = c(formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency), usedColor, {
-        bold: true,
-      });
-      const limit = c(formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency), "white", {
-        bold: true,
-      });
+      const used = c(
+        formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
+        usedColor,
+        {
+          bold: true,
+        },
+      );
+      const limit = c(
+        formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency),
+        "white",
+        {
+          bold: true,
+        },
+      );
       segments2.push(`${c("Extra ", "gray")}${used}${c("/", "gray")}${limit}`);
     }
   } else {
