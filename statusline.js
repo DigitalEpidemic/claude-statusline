@@ -102,6 +102,8 @@ const ANSI = {
   gray: "\x1b[38;5;245m", // secondary text
   dimGray: "\x1b[38;5;238m", // separators
   white: "\x1b[38;5;252m", // fixed bold accent for money values (Cost, Extra) — soft, not pure white
+  orange: "\x1b[38;5;208m", // non-default account badge (e.g. work profile)
+  blue: "\x1b[38;5;75m", // default account badge (personal profile)
 };
 
 function c(text, color, { dim, bold } = {}) {
@@ -271,6 +273,16 @@ function getClaudeConfigDir() {
   return process.env.CLAUDE_CONFIG_DIR
     ? path.resolve(process.env.CLAUDE_CONFIG_DIR)
     : path.join(os.homedir(), ".claude");
+}
+
+// Labels the active profile so multiple CLAUDE_CONFIG_DIR accounts (e.g. a
+// work profile) are visually distinguishable from the default. Derived from
+// the config dir name rather than hardcoded, e.g. ~/.claude-work -> "WORK".
+function getAccountLabel() {
+  if (!process.env.CLAUDE_CONFIG_DIR) return "PERSONAL";
+  const base = path.basename(getClaudeConfigDir());
+  const trimmed = base.replace(/^\.?claude-?/i, "");
+  return (trimmed || base).toUpperCase();
 }
 
 function extractAccessToken(rawJson) {
@@ -526,6 +538,9 @@ async function main() {
     c(modelName, "violet", { bold: true }) +
     (effort ? c(` · ${effort}`, "violet") : "");
   const segments1 = [modelSegment];
+
+  const accountBadgeColor = process.env.CLAUDE_CONFIG_DIR ? "orange" : "blue";
+  segments1.unshift(c(getAccountLabel(), accountBadgeColor, { bold: true }));
 
   const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
   segments1.push(
