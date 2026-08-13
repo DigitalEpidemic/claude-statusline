@@ -60,6 +60,43 @@ describe("renderBar", () => {
   });
 });
 
+describe("parseHiddenSegments", () => {
+  test("splits, trims, and lowercases keys", () => {
+    assert.deepEqual(
+      [...lib.parseHiddenSegments(" Session, RESET ,weekly")],
+      ["session", "reset", "weekly"],
+    );
+  });
+  test("empty set for missing/empty value", () => {
+    assert.deepEqual([...lib.parseHiddenSegments(undefined)], []);
+    assert.deepEqual([...lib.parseHiddenSegments("")], []);
+  });
+  test("ignores empty entries from stray commas", () => {
+    assert.deepEqual([...lib.parseHiddenSegments("session,,weekly,")], [
+      "session",
+      "weekly",
+    ]);
+  });
+});
+
+describe("parseCustomLabels", () => {
+  test("parses key=value pairs, lowercasing keys only", () => {
+    assert.deepEqual(lib.parseCustomLabels("badge=WORK,session=5hr"), {
+      badge: "WORK",
+      session: "5hr",
+    });
+  });
+  test("empty object for missing/empty value", () => {
+    assert.deepEqual(lib.parseCustomLabels(undefined), {});
+    assert.deepEqual(lib.parseCustomLabels(""), {});
+  });
+  test("drops entries missing a key or value", () => {
+    assert.deepEqual(lib.parseCustomLabels("badge=WORK,noequals,cost="), {
+      badge: "WORK",
+    });
+  });
+});
+
 describe("parseShortstat", () => {
   test("parses insertions and deletions", () => {
     assert.deepEqual(

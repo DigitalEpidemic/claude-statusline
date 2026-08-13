@@ -11,6 +11,8 @@ const {
   colorForContextTokens,
   colorForApproachingLimit,
   renderBar,
+  parseHiddenSegments,
+  parseCustomLabels,
   parseShortstat,
   getClaudeConfigDir,
   getConfigDirHash,
@@ -45,25 +47,14 @@ const RAW_COST_CURRENCY = (
 // so it travels with the account rather than the machine.
 // Valid keys: badge, model, context, git, node, session, reset, cost, weekly,
 // extra, weeklyreset.
-const HIDDEN_SEGMENTS = new Set(
-  (process.env.CLAUDE_STATUSLINE_HIDE ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean),
-);
+const HIDDEN_SEGMENTS = parseHiddenSegments(process.env.CLAUDE_STATUSLINE_HIDE);
 const showSegment = (name) => !HIDDEN_SEGMENTS.has(name);
 
 // Per-segment label overrides, e.g. "badge=WORK,session=5hr,weekly=7day" to
 // rename what a segment calls itself without changing its behavior. Same
 // per-account settings.json "env" block as CLAUDE_STATUSLINE_HIDE.
 // Valid keys: badge, context, session, reset, cost, weekly, extra, weeklyreset.
-const CUSTOM_LABELS = Object.fromEntries(
-  (process.env.CLAUDE_STATUSLINE_LABELS ?? "")
-    .split(",")
-    .map((pair) => pair.split("=").map((s) => s.trim()))
-    .filter(([key, value]) => key && value)
-    .map(([key, value]) => [key.toLowerCase(), value]),
-);
+const CUSTOM_LABELS = parseCustomLabels(process.env.CLAUDE_STATUSLINE_LABELS);
 const getLabel = (name, fallback) => CUSTOM_LABELS[name] ?? fallback;
 
 // Namespaced per CLAUDE_CONFIG_DIR so multiple accounts (e.g. a work profile

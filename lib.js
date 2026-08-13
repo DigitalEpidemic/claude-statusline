@@ -65,6 +65,29 @@ function renderBar(pct, width = BAR_WIDTH) {
 }
 
 // ---------------------------------------------------------------------------
+// Settings parsing (CLAUDE_STATUSLINE_HIDE / CLAUDE_STATUSLINE_LABELS)
+// ---------------------------------------------------------------------------
+
+function parseHiddenSegments(envValue) {
+  return new Set(
+    (envValue ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function parseCustomLabels(envValue) {
+  return Object.fromEntries(
+    (envValue ?? "")
+      .split(",")
+      .map((pair) => pair.split("=").map((s) => s.trim()))
+      .filter(([key, value]) => key && value)
+      .map(([key, value]) => [key.toLowerCase(), value]),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Git
 // ---------------------------------------------------------------------------
 
@@ -211,6 +234,8 @@ module.exports = {
   colorForContextTokens,
   colorForApproachingLimit,
   renderBar,
+  parseHiddenSegments,
+  parseCustomLabels,
   parseShortstat,
   getClaudeConfigDir,
   getConfigDirHash,
