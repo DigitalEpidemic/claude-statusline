@@ -36,6 +36,19 @@ const HIDDEN_SEGMENTS = new Set(
 );
 const showSegment = (name) => !HIDDEN_SEGMENTS.has(name);
 
+// Per-segment label overrides, e.g. "badge=WORK,session=5hr,weekly=7day" to
+// rename what a segment calls itself without changing its behavior. Same
+// per-account settings.json "env" block as CLAUDE_STATUSLINE_HIDE.
+// Valid keys: badge, context, session, reset, cost, weekly, extra.
+const CUSTOM_LABELS = Object.fromEntries(
+  (process.env.CLAUDE_STATUSLINE_LABELS ?? "")
+    .split(",")
+    .map((pair) => pair.split("=").map((s) => s.trim()))
+    .filter(([key, value]) => key && value)
+    .map(([key, value]) => [key.toLowerCase(), value]),
+);
+const getLabel = (name, fallback) => CUSTOM_LABELS[name] ?? fallback;
+
 // Namespaced per CLAUDE_CONFIG_DIR so multiple accounts (e.g. a work profile
 // under a custom CLAUDE_CONFIG_DIR) don't clobber each other's cached usage
 // within the TTL window.
@@ -551,7 +564,8 @@ async function main() {
     const accountBadgeColor = process.env.CLAUDE_CONFIG_DIR
       ? "orange"
       : "blue";
-    segments1.push(c(getAccountLabel(), accountBadgeColor, { bold: true }));
+    const badgeText = getLabel("badge", getAccountLabel());
+    segments1.push(c(badgeText, accountBadgeColor, { bold: true }));
   }
 
   if (showSegment("model")) {
@@ -566,7 +580,7 @@ async function main() {
   if (showSegment("context")) {
     const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
     segments1.push(
-      `Context ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`,
+      `${getLabel("context", "Context")} ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`,
     );
   }
 
@@ -588,13 +602,14 @@ async function main() {
   const segments2 = [];
 
   if (showSegment("session")) {
+    const sessionLabel = getLabel("session", "Session");
     if (usage) {
       const sessionColor = colorForPercent(usage.sessionUsage);
       segments2.push(
-        `Session ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`,
+        `${sessionLabel} ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`,
       );
     } else {
-      segments2.push(labeled("Session: ", "n/a", "gray"));
+      segments2.push(labeled(`${sessionLabel}: `, "n/a", "gray"));
     }
   }
 
@@ -603,7 +618,7 @@ async function main() {
       ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
       : "n/a";
     segments2.push(
-      `${c("Reset ", "gray")}${c(resetTime, "white", { bold: true })}`,
+      `${c(`${getLabel("reset", "Reset")} `, "gray")}${c(resetTime, "white", { bold: true })}`,
     );
   }
 
@@ -614,17 +629,18 @@ async function main() {
       usdToCad != null
         ? `${c(formatMoney(cost, "CAD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost / usdToCad, "USD")})`, "gray")}`
         : c(formatMoney(cost, "CAD"), "white", { bold: true });
-    segments2.push(`${c("Cost ", "gray")}${costDisplay}`);
+    segments2.push(`${c(`${getLabel("cost", "Cost")} `, "gray")}${costDisplay}`);
   }
 
   if (showSegment("weekly")) {
+    const weeklyLabel = getLabel("weekly", "Weekly");
     if (usage) {
       const weeklyColor = colorForPercent(usage.weeklyUsage);
       segments2.push(
-        `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`,
+        `${weeklyLabel} ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`,
       );
     } else {
-      segments2.push(labeled("Weekly: ", "n/a", "gray"));
+      segments2.push(labeled(`${weeklyLabel}: `, "n/a", "gray"));
     }
   }
 
@@ -640,7 +656,9 @@ async function main() {
       "white",
       { bold: true },
     );
-    segments2.push(`${c("Extra ", "gray")}${used}${c("/", "gray")}${limit}`);
+    segments2.push(
+      `${c(`${getLabel("extra", "Extra")} `, "gray")}${used}${c("/", "gray")}${limit}`,
+    );
   }
 
   console.log(segments1.join(sep));
