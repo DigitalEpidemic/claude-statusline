@@ -23,6 +23,19 @@ const CONTEXT_TOKEN_THRESHOLDS = { amber: 80_000, red: 120_000 };
 
 const CURRENCY_SYMBOL = { USD: "US$", CAD: "CA$" };
 
+// Segments to omit, e.g. "session,reset,weekly" for an API-pricing account
+// that has no five-hour/weekly subscription limits. Set per-account via the
+// "env" block in that profile's settings.json (CLAUDE_CONFIG_DIR/settings.json)
+// so it travels with the account rather than the machine.
+// Valid keys: badge, model, context, git, node, session, reset, cost, weekly, extra.
+const HIDDEN_SEGMENTS = new Set(
+  (process.env.CLAUDE_STATUSLINE_HIDE ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+const showSegment = (name) => !HIDDEN_SEGMENTS.has(name);
+
 // Namespaced per CLAUDE_CONFIG_DIR so multiple accounts (e.g. a work profile
 // under a custom CLAUDE_CONFIG_DIR) don't clobber each other's cached usage
 // within the TTL window.
@@ -531,83 +544,103 @@ async function main() {
   const cwd = data?.workspace?.current_dir ?? data?.cwd ?? process.cwd();
   const sep = c(" │ ", "dimGray");
 
-  // --- line 1: model+effort | context | git branch+changes ---
-  const modelName = data?.model?.display_name ?? "unknown";
-  const effort = getThinkingEffort(data?.transcript_path);
-  const modelSegment =
-    c(modelName, "violet", { bold: true }) +
-    (effort ? c(` · ${effort}`, "violet") : "");
-  const segments1 = [modelSegment];
+  // --- line 1: badge | model+effort | context | git branch+changes | node ---
+  const segments1 = [];
 
-  const accountBadgeColor = process.env.CLAUDE_CONFIG_DIR ? "orange" : "blue";
-  segments1.unshift(c(getAccountLabel(), accountBadgeColor, { bold: true }));
+  if (showSegment("badge")) {
+    const accountBadgeColor = process.env.CLAUDE_CONFIG_DIR
+      ? "orange"
+      : "blue";
+    segments1.push(c(getAccountLabel(), accountBadgeColor, { bold: true }));
+  }
 
-  const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
-  segments1.push(
-    `Context ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`,
-  );
+  if (showSegment("model")) {
+    const modelName = data?.model?.display_name ?? "unknown";
+    const effort = getThinkingEffort(data?.transcript_path);
+    segments1.push(
+      c(modelName, "violet", { bold: true }) +
+        (effort ? c(` · ${effort}`, "violet") : ""),
+    );
+  }
 
-  const git = getGitInfo(cwd);
-  const folderName = c(path.basename(cwd), "teal");
-  const locationSegment = git
-    ? `${folderName} ${c("·", "teal")} ${c(git.branch, "teal", { bold: true })} ${c("(", "gray")}${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}${c(")", "gray")}`
-    : folderName;
-  segments1.push(locationSegment);
+  if (showSegment("context")) {
+    const { usedTokens, usedPercentage } = getContextWindowMetrics(data);
+    segments1.push(
+      `Context ${c(formatTokens(usedTokens), colorForContextTokens(usedTokens))} (${c(formatPercent(usedPercentage), colorForPercent(usedPercentage), { bold: true })})`,
+    );
+  }
 
-  if (fs.existsSync(path.join(cwd, "package.json"))) {
+  if (showSegment("git")) {
+    const git = getGitInfo(cwd);
+    const folderName = c(path.basename(cwd), "teal");
+    const locationSegment = git
+      ? `${folderName} ${c("·", "teal")} ${c(git.branch, "teal", { bold: true })} ${c("(", "gray")}${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}${c(")", "gray")}`
+      : folderName;
+    segments1.push(locationSegment);
+  }
+
+  if (showSegment("node") && fs.existsSync(path.join(cwd, "package.json"))) {
     segments1.push(c(`⬢ ${process.version}`, "green"));
   }
 
-  // --- line 2: session bar+% | reset+cost | weekly bar+% | extra usage ---
+  // --- line 2: session bar+% | reset | cost | weekly bar+% | extra usage ---
   const usage = await getUsage();
   const segments2 = [];
-  if (usage) {
-    const sessionColor = colorForPercent(usage.sessionUsage);
-    segments2.push(
-      `Session ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`,
-    );
-  } else {
-    segments2.push(labeled("Session: ", "n/a", "gray"));
+
+  if (showSegment("session")) {
+    if (usage) {
+      const sessionColor = colorForPercent(usage.sessionUsage);
+      segments2.push(
+        `Session ${c(renderBar(usage.sessionUsage), sessionColor)} ${c(formatPercent(usage.sessionUsage), sessionColor, { bold: true })}`,
+      );
+    } else {
+      segments2.push(labeled("Session: ", "n/a", "gray"));
+    }
   }
 
-  const cost = data?.cost?.total_cost_usd ?? 0; // NOTE: mislabeled — this is actually CAD
-  const usdToCad = await getUsdToCadRate();
-  const costDisplay =
-    usdToCad != null
-      ? `${c(formatMoney(cost, "CAD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost / usdToCad, "USD")})`, "gray")}`
-      : c(formatMoney(cost, "CAD"), "white", { bold: true });
-  const resetTime = usage?.sessionResetAt
-    ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
-    : "n/a";
-  segments2.push(
-    `${c("Reset ", "gray")}${c(resetTime, "white", { bold: true })}${c(" │ ", "gray")}${c("Cost ", "gray")}${costDisplay}`,
-  );
-
-  if (usage) {
-    const weeklyColor = colorForPercent(usage.weeklyUsage);
+  if (showSegment("reset")) {
+    const resetTime = usage?.sessionResetAt
+      ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
+      : "n/a";
     segments2.push(
-      `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`,
+      `${c("Reset ", "gray")}${c(resetTime, "white", { bold: true })}`,
     );
-    if (usage.extraUsageEnabled) {
-      const usedColor = colorForApproachingLimit(usage.extraUsageUtilization);
-      const used = c(
-        formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
-        usedColor,
-        {
-          bold: true,
-        },
+  }
+
+  if (showSegment("cost")) {
+    const cost = data?.cost?.total_cost_usd ?? 0; // NOTE: mislabeled — this is actually CAD
+    const usdToCad = await getUsdToCadRate();
+    const costDisplay =
+      usdToCad != null
+        ? `${c(formatMoney(cost, "CAD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost / usdToCad, "USD")})`, "gray")}`
+        : c(formatMoney(cost, "CAD"), "white", { bold: true });
+    segments2.push(`${c("Cost ", "gray")}${costDisplay}`);
+  }
+
+  if (showSegment("weekly")) {
+    if (usage) {
+      const weeklyColor = colorForPercent(usage.weeklyUsage);
+      segments2.push(
+        `Weekly ${c(renderBar(usage.weeklyUsage), weeklyColor)} ${c(formatPercent(usage.weeklyUsage), weeklyColor, { bold: true })}`,
       );
-      const limit = c(
-        formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency),
-        "white",
-        {
-          bold: true,
-        },
-      );
-      segments2.push(`${c("Extra ", "gray")}${used}${c("/", "gray")}${limit}`);
+    } else {
+      segments2.push(labeled("Weekly: ", "n/a", "gray"));
     }
-  } else {
-    segments2.push(labeled("Weekly: ", "n/a", "gray"));
+  }
+
+  if (showSegment("extra") && usage?.extraUsageEnabled) {
+    const usedColor = colorForApproachingLimit(usage.extraUsageUtilization);
+    const used = c(
+      formatMoney(usage.extraUsageUsed, usage.extraUsageCurrency),
+      usedColor,
+      { bold: true },
+    );
+    const limit = c(
+      formatMoney(usage.extraUsageLimit, usage.extraUsageCurrency),
+      "white",
+      { bold: true },
+    );
+    segments2.push(`${c("Extra ", "gray")}${used}${c("/", "gray")}${limit}`);
   }
 
   console.log(segments1.join(sep));
