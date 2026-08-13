@@ -538,7 +538,7 @@ function formatDuration(ms) {
 
 function getContextWindowMetrics(data) {
   const cw = data?.context_window;
-  if (!cw) return { usedTokens: null, usedPercentage: null };
+  if (!cw) return { usedTokens: 0, usedPercentage: 0 };
   const usage = cw.current_usage;
   let usedTokens = null;
   if (typeof usage === "number") {
@@ -553,8 +553,8 @@ function getContextWindowMetrics(data) {
     cw.used_percentage ??
     (usedTokens != null && cw.context_window_size
       ? (usedTokens / cw.context_window_size) * 100
-      : null);
-  return { usedTokens, usedPercentage };
+      : 0);
+  return { usedTokens: usedTokens ?? 0, usedPercentage };
 }
 
 // ---------------------------------------------------------------------------
@@ -598,7 +598,7 @@ async function main() {
     const folderName = c(path.basename(cwd), "teal");
     const locationSegment = git
       ? `${folderName} ${c("·", "teal")} ${c(git.branch, "teal", { bold: true })} ${c("(", "gray")}${c(`+${git.insertions}`, "green")}${c(",", "gray")}${c(`-${git.deletions}`, "red")}${c(")", "gray")}`
-      : folderName;
+      : `${folderName} ${c("·", "teal")} ${c("no git", "gray")}`;
     segments1.push(locationSegment);
   }
 
