@@ -523,12 +523,12 @@ async function main() {
     segments2.push(labeled("Session: ", "n/a", "gray"));
   }
 
-  const cost = data?.cost?.total_cost_usd ?? 0;
+  const cost = data?.cost?.total_cost_usd ?? 0; // NOTE: mislabeled — this is actually CAD
   const usdToCad = await getUsdToCadRate();
   const costDisplay =
     usdToCad != null
-      ? `${c(formatMoney(cost, "USD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost * usdToCad, "CAD")})`, "gray")}`
-      : c(formatMoney(cost, "USD"), "white", { bold: true });
+      ? `${c(formatMoney(cost, "CAD"), "white", { bold: true })} ${c(`(≈${formatMoney(cost / usdToCad, "USD")})`, "gray")}`
+      : c(formatMoney(cost, "CAD"), "white", { bold: true });
   const resetTime = usage?.sessionResetAt
     ? formatDuration(new Date(usage.sessionResetAt).getTime() - Date.now())
     : "n/a";
