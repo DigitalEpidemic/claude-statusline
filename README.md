@@ -36,10 +36,10 @@ Two lines:
 1. Account badge | model + thinking effort | context window usage | git
    branch + changes (+ins/-del) | Node version (if `package.json` present)
 2. Session usage bar+% | time until session reset | session cost | weekly
-   usage bar+% | extra usage used/limit
+   usage bar+% | time until weekly reset | extra usage used/limit
 
 Any segment can be hidden or relabeled per account — see
-[Multiple accounts](#multiple-accounts) below.
+[Customization](#customization) below.
 
 ## Multiple accounts
 
@@ -85,8 +85,10 @@ same file that holds its `statusLine` block):
 
 - `CLAUDE_STATUSLINE_HIDE` — comma-separated segment keys to omit. Valid
   keys: `badge, model, context, git, node, session, reset, cost, weekly,
-  extra`. Useful for e.g. an API-pricing account that has no five-hour/
-  weekly subscription limits to show.
+  weeklyreset, extra`. Useful for e.g. an API-pricing account that has no
+  five-hour/weekly subscription limits to show, or to drop `weeklyreset`
+  (time until the weekly usage window rolls over, shown by default next to
+  `weekly`) if it's more than you want on the line.
 - `CLAUDE_STATUSLINE_LABELS` — comma-separated `key=value` pairs to rename a
   segment's label without changing its behavior, e.g. `badge=FIELDGUIDE`.
   Same keys as above (minus `model`/`git`/`node`, which have no label text).
@@ -143,6 +145,10 @@ recovered separately:
   (`<account>` is `default` or the same config-dir hash used for the
   Keychain lookup) for 180s so a 10s status line refresh doesn't hammer the
   endpoint, and so multiple accounts never read each other's cached data.
+
+The Cost segment also makes one outbound call of its own: a USD→CAD
+exchange rate from `open.er-api.com` (no auth needed), used to show cost in
+both currencies. Cached to `~/.cache/claude-statusline/fxrate.json` for 24h.
 
 ## Tuning
 

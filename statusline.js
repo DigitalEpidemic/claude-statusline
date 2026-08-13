@@ -36,7 +36,8 @@ const RAW_COST_CURRENCY = (
 // that has no five-hour/weekly subscription limits. Set per-account via the
 // "env" block in that profile's settings.json (CLAUDE_CONFIG_DIR/settings.json)
 // so it travels with the account rather than the machine.
-// Valid keys: badge, model, context, git, node, session, reset, cost, weekly, extra.
+// Valid keys: badge, model, context, git, node, session, reset, cost, weekly,
+// extra, weeklyreset.
 const HIDDEN_SEGMENTS = new Set(
   (process.env.CLAUDE_STATUSLINE_HIDE ?? "")
     .split(",")
@@ -48,7 +49,7 @@ const showSegment = (name) => !HIDDEN_SEGMENTS.has(name);
 // Per-segment label overrides, e.g. "badge=WORK,session=5hr,weekly=7day" to
 // rename what a segment calls itself without changing its behavior. Same
 // per-account settings.json "env" block as CLAUDE_STATUSLINE_HIDE.
-// Valid keys: badge, context, session, reset, cost, weekly, extra.
+// Valid keys: badge, context, session, reset, cost, weekly, extra, weeklyreset.
 const CUSTOM_LABELS = Object.fromEntries(
   (process.env.CLAUDE_STATUSLINE_LABELS ?? "")
     .split(",")
@@ -660,6 +661,15 @@ async function main() {
     }
   }
 
+  if (showSegment("weeklyreset")) {
+    const resetTime = usage?.weeklyResetAt
+      ? formatDuration(new Date(usage.weeklyResetAt).getTime() - Date.now())
+      : "n/a";
+    segments2.push(
+      `${c(`${getLabel("weeklyreset", "Weekly reset")} `, "gray")}${c(resetTime, "white", { bold: true })}`,
+    );
+  }
+
   if (showSegment("extra") && usage?.extraUsageEnabled) {
     const usedColor = colorForApproachingLimit(usage.extraUsageUtilization);
     const used = c(
@@ -681,4 +691,7 @@ async function main() {
   console.log(segments2.join(sep));
 }
 
-main();
+main().catch((err) => {
+  // Never let an unexpected error blank the status line entirely.
+  console.error(err);
+});
